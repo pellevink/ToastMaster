@@ -1,0 +1,9 @@
+## Interface: 11210
+## Title: ToastMaster
+## Version: 1
+## Notes: A tool for popping up notifications on the screen /tmstr
+## Author: Pellevink
+## SavedVariables: ToastMasterDB
+## OptionalDeps: 
+## Dependencies:
+ToastMaster.lua
