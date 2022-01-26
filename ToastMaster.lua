@@ -124,6 +124,7 @@ fToastMasterFrame.container = Utils.FrameCreator({"Frame", "", fToastMasterFrame
 	fToastMasterFrame:SetScrollChild(frame)	
 	fToastMasterFrame.container = frame
 	frame:SetAllPoints(fToastMasterFrame)
+	frame:SetWidth(frame:GetParent():GetWidth())
 	frame.activeToasts = Utils.NTable() -- a list in order from the topmost to the bottommost
 	frame.baggedToasts = Utils.NTable() -- a list of unordered, recyclable toasts
 	frame:Show()
