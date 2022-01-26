@@ -204,6 +204,7 @@ fToastMasterFrame.container = Utils.FrameCreator({"Frame", "", fToastMasterFrame
 		end
 	end)
 end)
+fToastMasterFrame.reminders = Utils.NTable()
 fToastMasterFrame:SetWidth(UIParent:GetWidth()*0.3)
 fToastMasterFrame:SetHeight(UIParent:GetHeight()*0.90)
 fToastMasterFrame:SetFrameStrata("DIALOG")
@@ -230,6 +231,32 @@ fToastMasterFrame:SetScript("OnDragStop",function()
 	this:StopMovingOrSizing()
 end)
 fToastMasterFrame:RegisterEvent("ADDON_LOADED")
+fToastMasterFrame:RegisterEvent("CHAT_MSG_WHISPER")
+local ZONE_CHANGE_EVENTS = {ZONE_CHANGED_INDOORS=true,ZONE_CHANGED_NEW_AREA=true, ZONE_CHANGED=true, ZONE_CHANGED_NEW_AREA=true}
+for event_name,v in pairs(ZONE_CHANGE_EVENTS) do
+	fToastMasterFrame:RegisterEvent(event_name)
+end
+fToastMasterFrame.CheckLocation = function(this)
+	print("checking reminders", this.reminders:size() )
+	for i,rem in ipairs(this.reminders) do
+		local mismatch = false
+		if rem.zone ~= nil then
+			if string.find(rem.zone, string.lower(GetRealZoneText())) == nil then
+				mismatch = true
+			end
+		end
+		if rem.area ~= nil then
+			if string.find(rem.area, string.lower(GetSubZoneText())) == nil then
+				mismatch = true
+			end
+		end
+		if rem.location ~= nil then
+			if string.find(rem.area, string.lower(GetSubZoneText().." "..GetRealZoneText())) == nil then
+				mismatch = true
+			end
+		end
+	end
+end
 fToastMasterFrame:SetScript("OnEvent", function()
 	if event == "ADDON_LOADED" and arg1 == "ToastMaster" then
 		if ToastMasterDB == nil then
@@ -240,11 +267,17 @@ fToastMasterFrame:SetScript("OnEvent", function()
 			this:ClearAllPoints()
 			this:SetPoint(unpack(toastPos))
 		end
+	elseif event == "CHAT_MSG_WHISPER" then
+		fToastMasterFrame.container:AddToast("@"..arg2, arg1)
+	elseif ZONE_CHANGE_EVENTS[event] ~= nil then
+		fToastMasterFrame.container:AddToast("Zone Changed"..tostring(arg2), tostring(event).." GetMinimapZoneText="..GetMinimapZoneText().." GetRealZoneText="..GetRealZoneText().." GetSubZoneText="..GetSubZoneText().." GetZoneText="..GetZoneText())
+
+		this:CheckLocation()		
 	end
 end)
 
 ToastMaster = {
-	AddToast = function(this,title, text)
+	AddToast = function(this, title, text)
 		fToastMasterFrame.container:AddToast(title, text)	
 	end,
 	UnlockFrame = function(this)
@@ -256,3 +289,46 @@ ToastMaster = {
 	
 }
 
+SLASH_TOASTMASTER_SLASH1 = "/toast"
+SlashCmdList["TOASTMASTER_SLASH"] = function(input)	
+	local params = Utils.NTable()
+	for k in string.gfind(input, "%S+") do
+		params:append(k)		
+	end
+
+	if params:size() == 0 then
+		print([[ToastMaster
+		Available commands
+		/toast me in <Location> <message>
+		will toast you a notification each time entering the location specified.
+		location can be comma separated in which case the addon will find the string within [zone],[area]. e.g. barrens,ratchet
+		]])
+		return
+	end
+
+	if params:size() == 1 and params[1] == "me" then
+		fToastMasterFrame:CheckLocation()
+	end
+
+	if params:size() >= 4 and params[1] == "me" and  params[2] == "in" then
+		local msg = {}
+		for i=4,params:size() do
+			table.insert(msg,params[i])
+		end
+
+		local newReminder = {
+			zone = nil,
+			area = nil,
+			location = nil,
+			message = table.concat(msg, " ")
+		}
+		
+		if string.find(params[3], ",") then
+			b,c = string.match(a,"([^,]+),(.+)")
+		end
+
+		
+		fToastMasterFrame.reminders:append(newReminder)
+	end
+
+end
