@@ -1,144 +1,10 @@
 local _G = getfenv(0)
 
-local function TableToStr(tbl)
-	local tabitems = {}				
-	for key,val in pairs(tbl) do
-		if type(val) == "table" then
-			val = TableToStr(val)
-		else
-			val = tostring(val)
-		end
-		table.insert(tabitems, tostring(key).."="..val)
-	end
-	
-	return "{"..table.concat(tabitems,",").."}"
-end
-
-local function ArgsToStr(...)
-	-- convert a ... argument to a comma separated text list
-	local text = nil
-	if arg ~= nil then
-		local items = {}
-		local count = 0
-		for i,v in ipairs(arg) do			
-			if type(v) == "table" then
-				table.insert(items, TableToStr(v) )
-			else
-				-- anything else and we just force it to string
-				table.insert(items, tostring(v))
-			end
-			count = count + 1
-		end
-		if count > 0 then
-			text = table.concat(items," ")
-		end
-	end
-	return tostring(text)
-end
 
 local function print(...)
 	-- local helper function to print to system console
-	local text = ArgsToStr(unpack(arg))
+	local text = Utils.ArgsToStr(unpack(arg))
 	_G["ChatFrame1"]:AddMessage(text)
-end
-
-local function SetDBVar(db, value, ...)
-print("srtgfsdnfgfj")
-	if arg.n == 0 then
-		return
-	end
-print("fdfdf")
-	if db == nil then
-		db = {}
-	end
-print(ToastMasterDB)
-	-- store and remove the last element in the chain
-	local last = arg[arg.n]
-	table.remove(arg, arg.n)
-	local ptr = db
-	for _,var in ipairs(arg) do
-		if ptr[var] == nil then
-			ptr[var] = {}
-		end
-		ptr = ptr[var]
-	end
-	ptr[last] = value
-end
-
-local function GetDBVar(db, ...)
-	-- obtain a variable from the database without failing
-	if db == nil then
-		return nil
-	end
-
-	local ptr = db
-	for _,var in ipairs(arg) do
-		if ptr[var] == nil then
-			return nil
-		end
-		ptr = ptr[var]
-	end
-	return ptr
-end
-
-local function FrameCreator(cfArgs, fnInit )
-	local newFrame = CreateFrame(unpack(cfArgs))
-	fnInit(newFrame)
-	return newFrame
-end
-
-
-local function NTable()
-	return {
-		_n=0,
-		size = function(self)
-			return self._n
-		end,
-		append = function(self, element)
-			table.insert(self, element)
-			self._n = self._n + 1
-		end,
-		back = function(self)
-			return self._n > 0 and self[self._n] or nil
-		end,
-		front = function(self)
-			return self._n > 0 and self[1] or nil
-		end,
-		popfront = function(self)
-			if self._n > 0 then
-				self._n = self._n - 1
-				table.remove(self, 1)
-			end
-		end,
-		erase = function(self, element)
-			local function _erase(t, tgt)
-				for i,e in ipairs(t) do
-					if e == tgt then
-						table.remove(t, i)
-						t._n = t._n - 1
-						return true
-					end
-				end
-				return false
-			end
-
-			while _erase(self, element) == true do
-			end
-
-		end
-	}
-end
-
-local function GetFramePoint(frame, pointName)
-	for i=0,frame:GetNumPoints() do
-		local next = {frame:GetPoint(i)}
-		if next ~= nil then
-			if next[1] == pointName then
-				return next
-			end
-		end
-	end
-	return nil
 end
 
 
@@ -196,7 +62,7 @@ local function CreateToast(parent, title, text)
 		this.nextBlinkUpdate = {}
 	end
 	ftoast.AdjustPoint = function(this, pointName, xoff, yoff)
-		local fp = GetFramePoint(this, pointName)
+		local fp = Utils.GetFramePoint(this, pointName)
 		if fp ~= nil then
 			this:SetPoint(fp[1], fp[2], fp[3], fp[4] + xoff, fp[5] + yoff)
 		end
@@ -233,7 +99,7 @@ local function CreateToast(parent, title, text)
 end
 
 local fToastMasterFrame = CreateFrame("ScrollFrame", nil, UIParent)
-fToastMasterFrame.container = FrameCreator({"Frame", "", fToastMasterFrame}, function(frame)		
+fToastMasterFrame.container = Utils.FrameCreator({"Frame", "", fToastMasterFrame}, function(frame)		
 	frame:SetBackdrop({bgFile = "Interface/ChatFrame/ChatFrameBackground"})
 	frame:SetBackdropColor(0,0,0,0.0)
 	frame.title = frame:CreateFontString("FontString")
@@ -244,8 +110,8 @@ fToastMasterFrame.container = FrameCreator({"Frame", "", fToastMasterFrame}, fun
 	fToastMasterFrame:SetScrollChild(frame)	
 	fToastMasterFrame.container = frame
 	frame:SetAllPoints()
-	frame.activeToasts = NTable() -- a list in order from the topmost to the bottommost
-	frame.baggedToasts = NTable() -- a list of unordered, recyclable toasts
+	frame.activeToasts = Utils.NTable() -- a list in order from the topmost to the bottommost
+	frame.baggedToasts = Utils.NTable() -- a list of unordered, recyclable toasts
 	frame:Show()
 	frame.nextAnimationUpdate = 0
 	frame.nextSoundAlert = nil
@@ -324,7 +190,7 @@ fToastMasterFrame.container = FrameCreator({"Frame", "", fToastMasterFrame}, fun
 		-- if our bottom active toast is below our frame border, the row needs to be scrolled up		
 		if topToast ~= nil and bottomToast ~= nil and GetTime() >= this.nextAnimationUpdate then
 			if bottomToast:GetBottom() < this:GetBottom() then
-				local topFp = GetFramePoint(topToast,"TOP")
+				local topFp = Utils.GetFramePoint(topToast,"TOP")
 				topToast:SetPoint("TOP", this, "BOTTOM", topFp[4], topFp[5] + 10)
 				this.nextAnimationUpdate = GetTime() + 0.01
 			end
@@ -355,7 +221,7 @@ fToastMasterFrame.LockFrame = function(this)
 	this.container.title:Hide()
 	this:EnableMouse(false)
 	local _,_,anchor,xpos,ypos = this:GetPoint("CENTER")
-	SetDBVar(ToastMasterDB, {anchor,xpos,ypos}, "ToastFrame", "pos")
+	Utils.SetDBCharVar(ToastMasterDB, {anchor,xpos,ypos}, "ToastFrame", "pos")
 end
 fToastMasterFrame:SetScript("OnDragStart",function()	
 	this:StartMoving()
@@ -369,7 +235,7 @@ fToastMasterFrame:SetScript("OnEvent", function()
 		if ToastMasterDB == nil then
 			ToastMasterDB = {}
 		end
-		local toastPos = GetDBVar(ToastMasterDB,"ToastFrame","pos")
+		local toastPos = Utils.GetDBCharVar(ToastMasterDB,"ToastFrame","pos")
 		if toastPos ~= nil then
 			this:ClearAllPoints()
 			this:SetPoint(unpack(toastPos))

@@ -6,4 +6,5 @@
 ## SavedVariables: ToastMasterDB
 ## OptionalDeps: 
 ## Dependencies:
+Utils.lua
 ToastMaster.lua
