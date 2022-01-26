@@ -1,5 +1,5 @@
 local _G = getfenv(0)
-
+local debugEnable = false
 
 local function print(...)
 	-- local helper function to print to system console
@@ -7,6 +7,13 @@ local function print(...)
 	_G["ChatFrame1"]:AddMessage(text)
 end
 
+local function debug(...)
+	if debugEnable == true then
+		-- local helper function to print to system console
+		local text = Utils.ArgsToStr(unpack(arg))
+		_G["ChatFrame1"]:AddMessage(text)
+	end
+end
 
 local function CreateToast(parent, title, text)
 	local ftoast = CreateFrame("Frame", nil, parent)
@@ -204,7 +211,7 @@ fToastMasterFrame.container = Utils.FrameCreator({"Frame", "", fToastMasterFrame
 		end
 	end)
 end)
-fToastMasterFrame.reminders = Utils.NTable()
+fToastMasterFrame.reminders = {} -- map id:reminder
 fToastMasterFrame:SetWidth(UIParent:GetWidth()*0.3)
 fToastMasterFrame:SetHeight(UIParent:GetHeight()*0.90)
 fToastMasterFrame:SetFrameStrata("DIALOG")
@@ -237,23 +244,36 @@ for event_name,v in pairs(ZONE_CHANGE_EVENTS) do
 	fToastMasterFrame:RegisterEvent(event_name)
 end
 fToastMasterFrame.CheckLocation = function(this)
-	print("checking reminders", this.reminders:size() )
-	for i,rem in ipairs(this.reminders) do
+	debug("checking reminders" )
+	for id,rem in pairs(this.reminders) do
+		debug("checking id=", id, "=", rem)
 		local mismatch = false
 		if rem.zone ~= nil then
-			if string.find(rem.zone, string.lower(GetRealZoneText())) == nil then
+			local zone = string.lower(GetRealZoneText())			
+			if string.find(zone, rem.zone) == nil then				
 				mismatch = true
 			end
+			debug("checking zone", rem.zone, "?", zone, "=", mismatch)			
 		end
 		if rem.area ~= nil then
-			if string.find(rem.area, string.lower(GetSubZoneText())) == nil then
+			local area = string.lower(GetSubZoneText())			
+			if string.find(area, rem.area) == nil then
 				mismatch = true
 			end
+			debug("checking area", rem.area, "?", area, "=", mismatch)
 		end
 		if rem.location ~= nil then
-			if string.find(rem.area, string.lower(GetSubZoneText().." "..GetRealZoneText())) == nil then
+			local location = string.lower(GetSubZoneText().." "..GetRealZoneText())
+			
+			if string.find(location, rem.location) == nil then
 				mismatch = true
 			end
+			debug("checking loc", rem.location, "?", location, "=", mismatch)
+		end
+		debug("mismatch",mismatch)
+		if mismatch == false then
+			fToastMasterFrame.container:AddToast("Arrived!", 
+				"Message to remind you when arriving in '"..GetRealZoneText().."', '"..GetSubZoneText().."': "..rem.message)
 		end
 	end
 end
@@ -267,11 +287,13 @@ fToastMasterFrame:SetScript("OnEvent", function()
 			this:ClearAllPoints()
 			this:SetPoint(unpack(toastPos))
 		end
+		this.reminders = Utils.GetDBCharVar(ToastMasterDB,"reminders")
+		if this.reminders == nil then
+			this.reminders = {}
+		end
 	elseif event == "CHAT_MSG_WHISPER" then
-		fToastMasterFrame.container:AddToast("@"..arg2, arg1)
+		this.container:AddToast("@"..arg2, arg1)
 	elseif ZONE_CHANGE_EVENTS[event] ~= nil then
-		fToastMasterFrame.container:AddToast("Zone Changed"..tostring(arg2), tostring(event).." GetMinimapZoneText="..GetMinimapZoneText().." GetRealZoneText="..GetRealZoneText().." GetSubZoneText="..GetSubZoneText().." GetZoneText="..GetZoneText())
-
 		this:CheckLocation()		
 	end
 end)
@@ -285,8 +307,61 @@ ToastMaster = {
 	end,
 	LockFrame = function(this)
 		fToastMasterFrame:LockFrame()
-	end
-	
+	end,
+	ListReminders = function(this)
+		local remList = {}
+		for id,rem in pairs(fToastMasterFrame.reminders) do
+			table.insert(remList, id)
+		end
+		return remList
+	end,
+	RemoveReminder = function(this, id)
+		if fToastMasterFrame.reminders[id] == nil then
+			return false
+		else
+			table.remove(fToastMasterFrame.reminders, id)
+			Utils.SetDBCharVar(ToastMasterDB,fToastMasterFrame.reminders,"reminders")
+			return true			
+		end
+	end,
+	AddReminder = function(this, location, message)
+
+		local newReminder = {
+			zone = nil,
+			area = nil,
+			location = nil,
+			message = message
+		}
+
+		-- <zone>,<area>
+		local m = {string.find(location, "([^,]+),(.+)")}
+		if m[3] and m[4] then
+			newReminder.zone = m[3]
+			newReminder.area = m[4]
+		else			
+			-- z[one]=<zone> or a[rea]=<area>
+			local m = {string.find(location, "([^=]+)=(.+)")}
+			if m[3] and m[4] then
+				if string.find("zone", "^"..m[3] ) == 1 then
+					newReminder.zone = m[4]
+				elseif string.find("area", "^"..m[3] ) == 1 then
+					newReminder.area = m[4]
+				end
+			else
+				newReminder.location = location
+			end
+		end
+
+		local nextId = 1
+		while fToastMasterFrame.reminders[nextId] ~= nil do
+			nextId = nextId + 1
+		end
+				
+		debug("new reminder=",newReminder, ", id=", nextId )
+		fToastMasterFrame.reminders[nextId] = newReminder
+		Utils.SetDBCharVar(ToastMasterDB,fToastMasterFrame.reminders,"reminders")
+		return nextId
+	end	
 }
 
 SLASH_TOASTMASTER_SLASH1 = "/toast"
@@ -308,27 +383,35 @@ SlashCmdList["TOASTMASTER_SLASH"] = function(input)
 
 	if params:size() == 1 and params[1] == "me" then
 		fToastMasterFrame:CheckLocation()
-	end
-
-	if params:size() >= 4 and params[1] == "me" and  params[2] == "in" then
+		print("Active reminders" )
+		local any = false
+		for id,rem in pairs(fToastMasterFrame.reminders) do
+			print("id", id, ":", rem)
+			any = true
+		end
+		if any == false then
+			print("<no active reminders>")
+		end
+	elseif params:size() == 2 and params[1] == "del" then
+		params[2] = tonumber(params[2])
+		if ToastMaster:RemoveReminder(params[2]) then			
+			print("reminder with id",id,"removed")
+		else
+			print("No reminder with id", id)
+		end
+	elseif params:size() >= 4 and params[1] == "me" and  params[2] == "in" then
 		local msg = {}
 		for i=4,params:size() do
 			table.insert(msg,params[i])
 		end
-
-		local newReminder = {
-			zone = nil,
-			area = nil,
-			location = nil,
-			message = table.concat(msg, " ")
-		}
-		
-		if string.find(params[3], ",") then
-			b,c = string.match(a,"([^,]+),(.+)")
+		local nextId = ToastMaster:AddReminder(params[3], table.concat(msg," "))
+		if nextId ~= nil then
+			print("added reminder id", nextId )
+		else
+			print("unable to add reminder")
 		end
-
-		
-		fToastMasterFrame.reminders:append(newReminder)
+	else
+		print("unable to parse /toast command")
 	end
 
 end
