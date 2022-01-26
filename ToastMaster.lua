@@ -84,6 +84,10 @@ local function CreateToast(parent, title, text)
 			table.remove(this.nextBlinkUpdate, 1)
 			if this.nextBlinkUpdate[1] == nil then
 				this:StopBlink()
+				if this.settings.persistent == false then
+					this.closeStr:Hide()
+					this:GetParent():RemoveToast(this)
+				end
 			end
 		end
 	end)
@@ -144,7 +148,7 @@ fToastMasterFrame.container = Utils.FrameCreator({"Frame", "", fToastMasterFrame
 		end
 				
 	end
-	frame.AddToast = function(this, title, text)
+	frame.AddToast = function(this, title, text, settings)
 		-- add the new toast to the bottom of the list of active toasts
 		-- when a toast is added, we then scroll the topmost toast upward lifting all toasts		
 		local toast = nil
@@ -155,13 +159,21 @@ fToastMasterFrame.container = Utils.FrameCreator({"Frame", "", fToastMasterFrame
 		else			
 			toast = CreateToast(this, title, text)
 		end
-
+		toast.settings = {
+			persistent = true
+		}		
 		toast:SetPoint("CENTER", 0, 0)
-
 		if this.activeToasts:size() == 0 then						
 			toast:SetPoint("TOP", toast:GetParent(), "BOTTOM", 0, 0)
 		else
 			toast:SetPoint("TOP", this.activeToasts:back(), "BOTTOM", 0, 0 )
+		end
+
+		
+		if settings then
+			for k,v in pairs(settings) do
+				toast.settings[k] = v
+			end			
 		end
 
 		this.activeToasts:append(toast)
@@ -299,8 +311,8 @@ fToastMasterFrame:SetScript("OnEvent", function()
 end)
 
 ToastMaster = {
-	AddToast = function(this, title, text)
-		fToastMasterFrame.container:AddToast(title, text)	
+	AddToast = function(this, title, text, settings)
+		fToastMasterFrame.container:AddToast(title, text, settings)
 	end,
 	UnlockFrame = function(this)
 		fToastMasterFrame:UnlockFrame()
