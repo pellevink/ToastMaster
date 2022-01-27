@@ -1,5 +1,5 @@
 local _G = getfenv(0)
-
+local debugEnable = false
 
 local function print(...)
 	-- local helper function to print to system console
@@ -7,6 +7,9 @@ local function print(...)
 	_G["ChatFrame1"]:AddMessage(text)
 end
 
+local function debug(...)
+	ScriptEditor:Log(Utils.ArgsToStr(unpack(arg)))
+end
 
 local function CreateToast(parent, title, text)
 	local ftoast = CreateFrame("Frame", nil, parent)
@@ -77,6 +80,10 @@ local function CreateToast(parent, title, text)
 			table.remove(this.nextBlinkUpdate, 1)
 			if this.nextBlinkUpdate[1] == nil then
 				this:StopBlink()
+				if this.settings.persistent == false then
+					this.closeStr:Hide()
+					this:GetParent():RemoveToast(this)
+				end
 			end
 		end
 	end)
@@ -99,6 +106,13 @@ local function CreateToast(parent, title, text)
 end
 
 local fToastMasterFrame = CreateFrame("ScrollFrame", nil, UIParent)
+fToastMasterFrame.reminders = {} -- map id:reminder
+fToastMasterFrame:SetWidth(UIParent:GetWidth()*0.3)
+fToastMasterFrame:SetHeight(UIParent:GetHeight()*0.90)
+fToastMasterFrame:SetFrameStrata("DIALOG")
+fToastMasterFrame:SetPoint("CENTER",0,0)
+fToastMasterFrame:Show()
+fToastMasterFrame:GetTop()
 fToastMasterFrame.container = Utils.FrameCreator({"Frame", "", fToastMasterFrame}, function(frame)		
 	frame:SetBackdrop({bgFile = "Interface/ChatFrame/ChatFrameBackground"})
 	frame:SetBackdropColor(0,0,0,0.0)
@@ -109,7 +123,8 @@ fToastMasterFrame.container = Utils.FrameCreator({"Frame", "", fToastMasterFrame
 	frame.title:Hide()
 	fToastMasterFrame:SetScrollChild(frame)	
 	fToastMasterFrame.container = frame
-	frame:SetAllPoints()
+	frame:SetAllPoints(fToastMasterFrame)
+	frame:SetWidth(frame:GetParent():GetWidth())
 	frame.activeToasts = Utils.NTable() -- a list in order from the topmost to the bottommost
 	frame.baggedToasts = Utils.NTable() -- a list of unordered, recyclable toasts
 	frame:Show()
@@ -121,6 +136,7 @@ fToastMasterFrame.container = Utils.FrameCreator({"Frame", "", fToastMasterFrame
 		topFp[5] = topFp[5] - toast:GetHeight()
 				
 		-- remove a toast from the toast list
+		toast:Hide()
 		this.activeToasts:erase(toast)
 		toast:SetPoint("TOP", UIParent, "BOTTOM", 0, 100)
 		this.baggedToasts:append(toast)
@@ -137,9 +153,12 @@ fToastMasterFrame.container = Utils.FrameCreator({"Frame", "", fToastMasterFrame
 		end
 				
 	end
-	frame.AddToast = function(this, title, text)
+	frame.AddToast = function(this, title, text, settings)
 		-- add the new toast to the bottom of the list of active toasts
 		-- when a toast is added, we then scroll the topmost toast upward lifting all toasts		
+		
+		debug("adding toast!")		
+		
 		local toast = nil
 		if this.baggedToasts:size() > 0 then
 			toast = this.baggedToasts:front()
@@ -147,14 +166,22 @@ fToastMasterFrame.container = Utils.FrameCreator({"Frame", "", fToastMasterFrame
 			toast:SetToastText(title, text)
 		else			
 			toast = CreateToast(this, title, text)
-		end
-
+		end		
 		toast:SetPoint("CENTER", 0, 0)
-
 		if this.activeToasts:size() == 0 then						
 			toast:SetPoint("TOP", toast:GetParent(), "BOTTOM", 0, 0)
 		else
 			toast:SetPoint("TOP", this.activeToasts:back(), "BOTTOM", 0, 0 )
+		end
+
+		debug( "center", this:GetTop() )
+		toast.settings = {
+			persistent = true
+		}
+		if settings then
+			for k,v in pairs(settings) do
+				toast.settings[k] = v
+			end			
 		end
 
 		this.activeToasts:append(toast)
@@ -204,11 +231,7 @@ fToastMasterFrame.container = Utils.FrameCreator({"Frame", "", fToastMasterFrame
 		end
 	end)
 end)
-fToastMasterFrame:SetWidth(UIParent:GetWidth()*0.3)
-fToastMasterFrame:SetHeight(UIParent:GetHeight()*0.90)
-fToastMasterFrame:SetFrameStrata("DIALOG")
-fToastMasterFrame:SetPoint("CENTER",0,0)
-fToastMasterFrame:Show()
+
 fToastMasterFrame.UnlockFrame = function(this)
 	this.container:SetBackdropColor(0,0,0,0.4)
 	this.container.title:Show()
@@ -230,6 +253,115 @@ fToastMasterFrame:SetScript("OnDragStop",function()
 	this:StopMovingOrSizing()
 end)
 fToastMasterFrame:RegisterEvent("ADDON_LOADED")
+fToastMasterFrame:RegisterEvent("CHAT_MSG_WHISPER")
+local ZONE_CHANGE_EVENTS = {ZONE_CHANGED_INDOORS=true,ZONE_CHANGED_NEW_AREA=true, ZONE_CHANGED=true, ZONE_CHANGED_NEW_AREA=true}
+for event_name,v in pairs(ZONE_CHANGE_EVENTS) do
+	fToastMasterFrame:RegisterEvent(event_name)
+end
+fToastMasterFrame.CheckLocation = function(this)
+	debug("checking reminders" )
+	for id,rem in pairs(this.reminders) do
+		debug("checking id=", id, "=", rem)
+		local mismatch = false
+		if rem.zone ~= nil then
+			local zone = string.lower(GetRealZoneText())			
+			if string.find(zone, rem.zone) == nil then				
+				mismatch = true
+			end
+			debug("checking zone", rem.zone, "?", zone, "=", mismatch)			
+		end
+		if rem.area ~= nil then
+			local area = string.lower(GetSubZoneText())			
+			if string.find(area, rem.area) == nil then
+				mismatch = true
+			end
+			debug("checking area", rem.area, "?", area, "=", mismatch)
+		end
+		if rem.location ~= nil then
+			local location = string.lower(GetSubZoneText().." "..GetRealZoneText())
+			
+			if string.find(location, rem.location) == nil then
+				mismatch = true
+			end
+			debug("checking loc", rem.location, "?", location, "=", mismatch)
+		end
+		debug("mismatch",mismatch)
+		if mismatch == false then
+			fToastMasterFrame.container:AddToast("Arrived!", 
+				"Message to remind you when arriving in '"..GetRealZoneText().."', '"..GetSubZoneText().."': "..rem.message)
+		end
+	end
+end
+
+ToastMaster = nil
+local function CreateToastMasterAPI()
+	return {
+		AddToast = function(this, title, text, settings)
+			fToastMasterFrame.container:AddToast(title, text, settings)
+		end,
+		UnlockFrame = function(this)
+			fToastMasterFrame:UnlockFrame()
+		end,
+		LockFrame = function(this)
+			fToastMasterFrame:LockFrame()
+		end,
+		ListReminders = function(this)
+			local remList = {}
+			for id,rem in pairs(fToastMasterFrame.reminders) do
+				table.insert(remList, id)
+			end
+			return remList
+		end,
+		RemoveReminder = function(this, id)
+			if fToastMasterFrame.reminders[id] == nil then
+				return false
+			else
+				table.remove(fToastMasterFrame.reminders, id)
+				Utils.SetDBCharVar(ToastMasterDB,fToastMasterFrame.reminders,"reminders")
+				return true			
+			end
+		end,
+		AddReminder = function(this, location, message)
+
+			local newReminder = {
+				zone = nil,
+				area = nil,
+				location = nil,
+				message = message
+			}
+
+			-- <zone>,<area>
+			local m = {string.find(location, "([^,]+),(.+)")}
+			if m[3] and m[4] then
+				newReminder.zone = m[3]
+				newReminder.area = m[4]
+			else			
+				-- z[one]=<zone> or a[rea]=<area>
+				local m = {string.find(location, "([^=]+)=(.+)")}
+				if m[3] and m[4] then
+					if string.find("zone", "^"..m[3] ) == 1 then
+						newReminder.zone = m[4]
+					elseif string.find("area", "^"..m[3] ) == 1 then
+						newReminder.area = m[4]
+					end
+				else
+					newReminder.location = location
+				end
+			end
+
+			local nextId = 1
+			while fToastMasterFrame.reminders[nextId] ~= nil do
+				nextId = nextId + 1
+			end
+					
+			debug("new reminder=",newReminder, ", id=", nextId )
+			fToastMasterFrame.reminders[nextId] = newReminder
+			Utils.SetDBCharVar(ToastMasterDB,fToastMasterFrame.reminders,"reminders")
+			return nextId
+		end	
+	}
+end
+
 fToastMasterFrame:SetScript("OnEvent", function()
 	if event == "ADDON_LOADED" and arg1 == "ToastMaster" then
 		if ToastMasterDB == nil then
@@ -240,19 +372,69 @@ fToastMasterFrame:SetScript("OnEvent", function()
 			this:ClearAllPoints()
 			this:SetPoint(unpack(toastPos))
 		end
+		this.reminders = Utils.GetDBCharVar(ToastMasterDB,"reminders")
+		if this.reminders == nil then
+			this.reminders = {}
+		end
+		if ToastMaster == nil then
+			ToastMaster = CreateToastMasterAPI()
+		end
+	elseif event == "CHAT_MSG_WHISPER" then
+		this.container:AddToast("@"..arg2, arg1)
+	elseif ZONE_CHANGE_EVENTS[event] ~= nil then
+		this:CheckLocation()		
 	end
 end)
 
-ToastMaster = {
-	AddToast = function(this,title, text)
-		fToastMasterFrame.container:AddToast(title, text)	
-	end,
-	UnlockFrame = function(this)
-		fToastMasterFrame:UnlockFrame()
-	end,
-	LockFrame = function(this)
-		fToastMasterFrame:LockFrame()
-	end
-	
-}
 
+SLASH_TOASTMASTER_SLASH1 = "/toast"
+SlashCmdList["TOASTMASTER_SLASH"] = function(input)	
+	local params = Utils.NTable()
+	for k in string.gfind(input, "%S+") do
+		params:append(k)		
+	end
+
+	if params:size() == 0 then
+		print([[ToastMaster
+		Available commands
+		/toast me in <Location> <message>
+		will toast you a notification each time entering the location specified.
+		location can be comma separated in which case the addon will find the string within [zone],[area]. e.g. barrens,ratchet
+		]])
+		return
+	end
+
+	if params:size() == 1 and params[1] == "me" then
+		fToastMasterFrame:CheckLocation()
+		print("Active reminders" )
+		local any = false
+		for id,rem in pairs(fToastMasterFrame.reminders) do
+			print("id", id, ":", rem)
+			any = true
+		end
+		if any == false then
+			print("<no active reminders>")
+		end
+	elseif params:size() == 2 and params[1] == "del" then
+		params[2] = tonumber(params[2])
+		if ToastMaster:RemoveReminder(params[2]) then			
+			print("reminder with id",id,"removed")
+		else
+			print("No reminder with id", id)
+		end
+	elseif params:size() >= 4 and params[1] == "me" and  params[2] == "in" then
+		local msg = {}
+		for i=4,params:size() do
+			table.insert(msg,params[i])
+		end
+		local nextId = ToastMaster:AddReminder(params[3], table.concat(msg," "))
+		if nextId ~= nil then
+			print("added reminder id", nextId )
+		else
+			print("unable to add reminder")
+		end
+	else
+		print("unable to parse /toast command")
+	end
+
+end
