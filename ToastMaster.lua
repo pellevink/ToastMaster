@@ -88,9 +88,13 @@ local function CreateToast(parent, title, text)
 		end
 	end)
 	ftoast:SetScript("OnMouseUp", function()
-		this.closeStr:Hide()
-		this:GetParent():RemoveToast(this)
-		PlaySound("igMiniMapZoomIn")
+		if this.settings.onclick ~= nil and arg1 ~= "RightButton" then
+			this.settings.onclick()
+		else
+			this.closeStr:Hide()
+			this:GetParent():RemoveToast(this)
+			PlaySound("igMiniMapZoomIn")
+		end
 	end)
 	ftoast:SetScript("OnEnter", function()
 		this:StopBlink()
@@ -183,6 +187,13 @@ fToastMasterFrame.container = Utils.FrameCreator({"Frame", "", fToastMasterFrame
 				toast.settings[k] = v
 			end			
 		end
+
+		if toast.settings.onclick ~= nil then
+			toast.closeStr:SetText("|cFF00FF00right-click to close|r")
+		else
+			toast.closeStr:SetText("|cFF00FF00click to close|r")
+		end
+
 
 		this.activeToasts:append(toast)
 		toast:StartBlink()		
@@ -384,7 +395,9 @@ fToastMasterFrame:SetScript("OnEvent", function()
 		
 		
 	elseif event == "CHAT_MSG_WHISPER" then
-		this.container:AddToast("@"..arg2, arg1)
+		this.container:AddToast("@"..arg2, arg1, {onclick=function()
+			-- click to start chat TODO
+		end})
 	elseif ZONE_CHANGE_EVENTS[event] ~= nil then
 		this:CheckLocation()		
 	elseif event == "PLAYER_ENTERING_WORLD" then
@@ -402,7 +415,10 @@ fToastMasterFrame:SetScript("OnEvent", function()
 							fToastMasterFrame.unitscanAlert = nil
 						end					
 					elseif fToastMasterFrame.unitscanAlert == true then
-						ToastMaster:AddToast("UnitScan Found", arg[2])
+						_,_,name = string.find(arg[2], "<unitscan>%s*(%S+)")
+						ToastMaster:AddToast("UnitScan Found", name .. "\nclick to target", {onclick=function()
+							TargetByName(name, true)
+						end})
 					end
 				end
 
