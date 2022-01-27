@@ -254,6 +254,7 @@ fToastMasterFrame:SetScript("OnDragStop",function()
 end)
 fToastMasterFrame:RegisterEvent("ADDON_LOADED")
 fToastMasterFrame:RegisterEvent("CHAT_MSG_WHISPER")
+fToastMasterFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 local ZONE_CHANGE_EVENTS = {ZONE_CHANGED_INDOORS=true,ZONE_CHANGED_NEW_AREA=true, ZONE_CHANGED=true, ZONE_CHANGED_NEW_AREA=true}
 for event_name,v in pairs(ZONE_CHANGE_EVENTS) do
 	fToastMasterFrame:RegisterEvent(event_name)
@@ -379,10 +380,35 @@ fToastMasterFrame:SetScript("OnEvent", function()
 		if ToastMaster == nil then
 			ToastMaster = CreateToastMasterAPI()
 		end
+
+		
+		
 	elseif event == "CHAT_MSG_WHISPER" then
 		this.container:AddToast("@"..arg2, arg1)
 	elseif ZONE_CHANGE_EVENTS[event] ~= nil then
 		this:CheckLocation()		
+	elseif event == "PLAYER_ENTERING_WORLD" then
+		-- drop in a chat frame spy
+		if DEFAULT_CHAT_FRAME then
+			fToastMasterFrame.DEFAULT_CHAT_FRAME_AddMessage = DEFAULT_CHAT_FRAME.AddMessage
+			DEFAULT_CHAT_FRAME.AddMessage = function(...)
+				
+				-- unitscan spy
+				if string.find(arg[2], "<unitscan>") then
+					if string.find(arg[2], "!!!!!!!!!!!") then					
+						if fToastMasterFrame.unitscanAlert == nil then
+							fToastMasterFrame.unitscanAlert = true
+						else
+							fToastMasterFrame.unitscanAlert = nil
+						end					
+					elseif fToastMasterFrame.unitscanAlert == true then
+						ToastMaster:AddToast("UnitScan Found", arg[2])
+					end
+				end
+
+				fToastMasterFrame.DEFAULT_CHAT_FRAME_AddMessage(unpack(arg))
+			end
+		end
 	end
 end)
 
