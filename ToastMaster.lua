@@ -70,7 +70,7 @@ local function CreateToast(parent, title, text)
 			this:SetPoint(fp[1], fp[2], fp[3], fp[4] + xoff, fp[5] + yoff)
 		end
 	end
-	ftoast:SetScript("OnUpdate",function()	
+	ftoast:SetScript("OnUpdate",function()
 		if this.nextBlinkUpdate[1] ~= nil and GetTime() >= this.nextBlinkUpdate[1] then
 			if this.fblink:GetBackdropColor() == 0 then
 				this.fblink:SetBackdropColor(1,1,0,0.2)
@@ -88,9 +88,13 @@ local function CreateToast(parent, title, text)
 		end
 	end)
 	ftoast:SetScript("OnMouseUp", function()
-		this.closeStr:Hide()
-		this:GetParent():RemoveToast(this)
-		PlaySound("igMiniMapZoomIn")
+		if this.settings.onclick ~= nil and arg1 ~= "RightButton" then
+			this.settings.onclick(this.settings.onclickParam)
+		else
+			this.closeStr:Hide()
+			this:GetParent():RemoveToast(this)
+			PlaySound("igMiniMapZoomIn")
+		end
 	end)
 	ftoast:SetScript("OnEnter", function()
 		this:StopBlink()
@@ -130,6 +134,7 @@ fToastMasterFrame.container = Utils.FrameCreator({"Frame", "", fToastMasterFrame
 	frame:Show()
 	frame.nextAnimationUpdate = 0
 	frame.nextSoundAlert = nil
+	Utils.CreateTimer(frame, "targetUpdate", 1.0)
 	frame.RemoveToast = function(this, toast)
 		-- the new top position will be the current minus the width
 		local topFp = {this.activeToasts:front():GetPoint("TOP")}
@@ -184,26 +189,44 @@ fToastMasterFrame.container = Utils.FrameCreator({"Frame", "", fToastMasterFrame
 			end			
 		end
 
+		if toast.settings.onclick ~= nil then
+			toast.closeStr:SetText("|cFF00FF00right-click to close|r")
+		else
+			toast.closeStr:SetText("|cFF00FF00click to close|r")
+		end
+
+
 		this.activeToasts:append(toast)
 		toast:StartBlink()		
 		toast:Show()
 		this.nextSoundAlert = 0 -- instantly play a sound next OnUpdate	
 	end
---[[
-	-- a little test
-	frame:EnableMouseWheel(true)
-	frame:SetScript("OnMouseWheel",function()
-		if lolcnt == nil then
-			lolcnt = 1
-		else
-			lolcnt = lolcnt + 1
-		end
-		this:AddToast("alert "..lolcnt, "this is some this")
-	end)
-]]
 	frame:SetScript("OnUpdate", function()
 		local topToast = this.activeToasts:front()
 		local bottomToast = this.activeToasts:back()
+		
+		if Utils.UpdateReady(this, "targetUpdate") == true then
+			for name,data in pairs(fToastMasterFrame.targets) do
+				if (data == true or GetTime() >= data)  then
+					if UnitAffectingCombat("player") and UnitName("Target") then
+						-- we do not want to swap targets mid fight
+					else
+						local currentTarget = UnitName("Target")
+						TargetByName(name, true)
+						local targetName = UnitName("Target")					
+						if targetName == name then
+							if currentTarget ~= targetName then
+								TargetLastTarget()
+							end
+							fToastMasterFrame.targets[name] = GetTime() + 5
+							this:AddToast("Located Target!", "The unit '"..name.."' is now targettable!\nclick to target", {onclickParam=name,onclick=function(name)
+								TargetByName(name, true)
+							end})
+						end
+					end
+				end
+			end
+		end
 
 		-- is it time to make some noise?
 		if topToast ~= nil and this.nextSoundAlert ~= nil and GetTime() >= this.nextSoundAlert then
@@ -254,6 +277,7 @@ fToastMasterFrame:SetScript("OnDragStop",function()
 end)
 fToastMasterFrame:RegisterEvent("ADDON_LOADED")
 fToastMasterFrame:RegisterEvent("CHAT_MSG_WHISPER")
+fToastMasterFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 local ZONE_CHANGE_EVENTS = {ZONE_CHANGED_INDOORS=true,ZONE_CHANGED_NEW_AREA=true, ZONE_CHANGED=true, ZONE_CHANGED_NEW_AREA=true}
 for event_name,v in pairs(ZONE_CHANGE_EVENTS) do
 	fToastMasterFrame:RegisterEvent(event_name)
@@ -321,6 +345,14 @@ local function CreateToastMasterAPI()
 				return true			
 			end
 		end,
+		AddTarget = function(this, target)
+			fToastMasterFrame.targets[target] = true
+			Utils.SetDBCharVar(ToastMasterDB, fToastMasterFrame.targets, "targets")
+		end,
+		RemoveTarget = function(this, target)
+			fToastMasterFrame.targets[target] = nil
+			Utils.SetDBCharVar(ToastMasterDB, fToastMasterFrame.targets, "targets")
+		end,
 		AddReminder = function(this, location, message)
 
 			local newReminder = {
@@ -372,17 +404,52 @@ fToastMasterFrame:SetScript("OnEvent", function()
 			this:ClearAllPoints()
 			this:SetPoint(unpack(toastPos))
 		end
-		this.reminders = Utils.GetDBCharVar(ToastMasterDB,"reminders")
+
+		this.reminders = Utils.GetDBCharVar(ToastMasterDB, "reminders")
 		if this.reminders == nil then
 			this.reminders = {}
 		end
+
+		this.targets = Utils.GetDBCharVar(ToastMasterDB, "targets")
+		if this.targets == nil then
+			this.targets = {}
+		end
+
 		if ToastMaster == nil then
 			ToastMaster = CreateToastMasterAPI()
 		end
+		
 	elseif event == "CHAT_MSG_WHISPER" then
-		this.container:AddToast("@"..arg2, arg1)
+		this.container:AddToast("@"..arg2, arg1, {onclick=function()
+			-- click to start chat TODO
+		end})
 	elseif ZONE_CHANGE_EVENTS[event] ~= nil then
 		this:CheckLocation()		
+	elseif event == "PLAYER_ENTERING_WORLD" then
+		-- drop in a chat frame spy
+		if DEFAULT_CHAT_FRAME then
+			fToastMasterFrame.DEFAULT_CHAT_FRAME_AddMessage = DEFAULT_CHAT_FRAME.AddMessage
+			DEFAULT_CHAT_FRAME.AddMessage = function(...)
+				
+				-- unitscan spy
+				if string.find(arg[2], "<unitscan>") then
+					if string.find(arg[2], "!!!!!!!!!!!") then					
+						if fToastMasterFrame.unitscanAlert == nil then
+							fToastMasterFrame.unitscanAlert = true
+						else
+							fToastMasterFrame.unitscanAlert = nil
+						end					
+					elseif fToastMasterFrame.unitscanAlert == true then
+						_,_,name = string.find(arg[2], "<unitscan>%s*(%S+)")
+						ToastMaster:AddToast("UnitScan Found", name .. "\nclick to target", {onclickParam=name,onclick=function(name)
+							TargetByName(name, true)
+						end})
+					end
+				end
+
+				fToastMasterFrame.DEFAULT_CHAT_FRAME_AddMessage(unpack(arg))
+			end
+		end
 	end
 end)
 
@@ -390,8 +457,9 @@ end)
 SLASH_TOASTMASTER_SLASH1 = "/toast"
 SlashCmdList["TOASTMASTER_SLASH"] = function(input)	
 	local params = Utils.NTable()
+	local appending = false
 	for k in string.gfind(input, "%S+") do
-		params:append(k)		
+		params:append(k)
 	end
 
 	if params:size() == 0 then
@@ -422,11 +490,21 @@ SlashCmdList["TOASTMASTER_SLASH"] = function(input)
 		else
 			print("No reminder with id", id)
 		end
-	elseif params:size() >= 4 and params[1] == "me" and  params[2] == "in" then
-		local msg = {}
-		for i=4,params:size() do
-			table.insert(msg,params[i])
-		end
+	elseif params:size() >= 2 and string.find("target", "^"..params[1]) then
+		table.remove(params, 1)
+		local target = table.concat(params, " ")
+		ToastMaster:AddTarget(target)
+		print("Will toast you on when '"..target.."' is targettable.")
+	elseif params:size() >= 3 and params[1] == "rm" and string.find("target", "^"..params[2]) then
+		table.remove(params, 1)
+		table.remove(params, 1)
+		local target = table.concat(params, " ")
+		ToastMaster:RemoveTarget(target)
+		print("Will not notify you when '"..target.."' is targettable.")
+	elseif params:size() >= 3 and params[1] == "in" then
+		-- 1:in 2...:loc
+		table.remove(params, 1)
+		local msg = table.concat(params, " ")		
 		local nextId = ToastMaster:AddReminder(params[3], table.concat(msg," "))
 		if nextId ~= nil then
 			print("added reminder id", nextId )
