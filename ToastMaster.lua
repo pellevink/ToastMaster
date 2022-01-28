@@ -440,7 +440,7 @@ fToastMasterFrame:SetScript("OnEvent", function()
 							fToastMasterFrame.unitscanAlert = nil
 						end					
 					elseif fToastMasterFrame.unitscanAlert == true then
-						_,_,name = string.find(arg[2], "<unitscan>%s*(%S+)")
+						_,_,name = string.find(arg[2], "<unitscan>%s*(.+)")
 						ToastMaster:AddToast("UnitScan Found", name .. "\nclick to target", {onclickParam=name,onclick=function(name)
 							TargetByName(name, true)
 						end})
