@@ -483,6 +483,10 @@ SlashCmdList["TOASTMASTER_SLASH"] = function(input)
 		if any == false then
 			print("<no active reminders>")
 		end
+	elseif params[1] == "rf" then
+		-- reset frame
+		fToastMasterFrame:ClearAllPoints()
+		fToastMasterFrame:SetPoint("CENTER", 0, 0)
 	elseif params:size() == 2 and params[1] == "del" then
 		params[2] = tonumber(params[2])
 		if ToastMaster:RemoveReminder(params[2]) then			
