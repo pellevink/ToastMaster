@@ -487,6 +487,7 @@ SlashCmdList["TOASTMASTER_SLASH"] = function(input)
 		-- reset frame
 		fToastMasterFrame:ClearAllPoints()
 		fToastMasterFrame:SetPoint("CENTER", 0, 0)
+		local _,_,anchor,xpos,ypos = this:GetPoint("CENTER")
 		Utils.SetDBCharVar(ToastMasterDB, {anchor,xpos,ypos}, "ToastFrame", "pos")
 	elseif params:size() == 2 and params[1] == "del" then
 		params[2] = tonumber(params[2])
