@@ -16,3 +16,10 @@ Unlocks the ToastMaster pane and makes it movable
 ToastMaster:LockFrame()
 
 Locks the frame again, and stores its position to saved variables.
+
+## Slash Commands
+The addon makes use of the `/toast` slash command to provide direct user interation, aside from addon integration.
+
+`/toast rf` 
+
+Reset the toast frame to a center UI position.
