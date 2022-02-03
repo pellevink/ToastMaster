@@ -440,7 +440,7 @@ fToastMasterFrame:SetScript("OnEvent", function()
 							fToastMasterFrame.unitscanAlert = nil
 						end					
 					elseif fToastMasterFrame.unitscanAlert == true then
-						_,_,name = string.find(arg[2], "<unitscan>%s*(%S+)")
+						_,_,name = string.find(arg[2], "<unitscan>%s*(.+)")
 						ToastMaster:AddToast("UnitScan Found", name .. "\nclick to target", {onclickParam=name,onclick=function(name)
 							TargetByName(name, true)
 						end})
@@ -483,6 +483,12 @@ SlashCmdList["TOASTMASTER_SLASH"] = function(input)
 		if any == false then
 			print("<no active reminders>")
 		end
+	elseif params[1] == "rf" then
+		-- reset frame
+		fToastMasterFrame:ClearAllPoints()
+		fToastMasterFrame:SetPoint("CENTER", 0, 0)
+		local _,_,anchor,xpos,ypos = this:GetPoint("CENTER")
+		Utils.SetDBCharVar(ToastMasterDB, {anchor,xpos,ypos}, "ToastFrame", "pos")
 	elseif params:size() == 2 and params[1] == "del" then
 		params[2] = tonumber(params[2])
 		if ToastMaster:RemoveReminder(params[2]) then			
