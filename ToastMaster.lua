@@ -8,7 +8,9 @@ local function print(...)
 end
 
 local function debug(...)
-	ScriptEditor:Log(Utils.ArgsToStr(unpack(arg)))
+	if debugEnable then
+		print(Utils.ArgsToStr(unpack(arg)))
+	end
 end
 
 local function CreateToast(parent, title, text)
