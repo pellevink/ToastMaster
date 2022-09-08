@@ -1,6 +1,6 @@
 ## Interface: 11210
 ## Title: ToastMaster
-## Version: 1
+## Version: 2
 ## Notes: A tool for popping up notifications on the screen /tmstr
 ## Author: Pellevink
 ## SavedVariables: ToastMasterDB
